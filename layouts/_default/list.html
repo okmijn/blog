@@ -1,0 +1,16 @@
+{{ define "main" }}
+<article>
+  <header>
+    <h1>{{ .Title }}</h1>
+  </header>
+  {{ if .Pages }}
+  <ul>
+    {{ range .Pages }}
+      <li><span class="item-date">{{ .Date.Format "2006-01-02" }}</span> <a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
+    {{ end }}
+  </ul>
+  {{ else }}
+  <p>No entries.</p>
+  {{ end }}
+</article>
+{{ end }}

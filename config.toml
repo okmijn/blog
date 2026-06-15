@@ -1,0 +1,25 @@
+baseURL = "https://example.com/"
+languageCode = "en-us"
+title = "Kartik Rathor"
+# No theme is required; custom layouts are in /layouts
+
+[params]
+  description = "Hello, I’m a software engineer learning systems programming, distributed systems, and building software from first principles. On this page you can find journal of my attempts. Cheers, happy building!"  
+  startDate = "2024-07-15"
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true
+    [markup.goldmark.extensions]
+      table = true
+      linkify = true
+      typographer = false
+      strikethrough = true
+      taskList = true
+      definitionList = false
+      footnote = true
+
+[minify]
+  disableHTML = false
+  disableCSS = false
+  disableJS = true

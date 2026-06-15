@@ -1,0 +1,19 @@
+{{ define "main" }}
+<article>
+  <div class="post-meta">
+    <a href="/">..</a>
+    {{ with .Date }}
+      <p>
+        <time datetime="{{ .Format "2006-01-02 15:04:05 -0700 MST" }}">{{ .Format "2006-01-02" }}</time>
+      </p>
+    {{ end }}
+  </div>
+
+  <header>
+    <h1>{{ .Title }}</h1>
+  </header>
+  <section class="content">
+    {{ .Content }}
+  </section>
+</article>
+{{ end }}

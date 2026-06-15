@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+	<channel>
+		<title>Projects on Kartik Rathor</title>
+		<link>http://localhost:1313/projects/</link>
+		<description>Recent content in Projects on Kartik Rathor</description>
+		<generator>Hugo</generator>
+		<language>en-us</language>
+		
+		
+		
+		
+			<lastBuildDate>Mon, 20 Apr 2026 00:00:00 +0000</lastBuildDate>
+		
+			<atom:link href="http://localhost:1313/projects/index.xml" rel="self" type="application/rss+xml" />
+			<item>
+				<title>Self-hosted archive</title>
+				<link>http://localhost:1313/projects/self-hosted-archive/</link>
+				<pubDate>Mon, 20 Apr 2026 00:00:00 +0000</pubDate>
+				<guid>http://localhost:1313/projects/self-hosted-archive/</guid>
+				<description>&lt;p&gt;A read-only archive for notes, scripts, and low-bandwidth reference material.&lt;/p&gt;&#xA;&lt;p&gt;It is intentionally small, predictable, and easy to update with a single deploy step.&lt;/p&gt;</description>
+			</item>
+			<item>
+				<title>Terminal blog</title>
+				<link>http://localhost:1313/projects/terminal-blog/</link>
+				<pubDate>Sun, 15 Mar 2026 00:00:00 +0000</pubDate>
+				<guid>http://localhost:1313/projects/terminal-blog/</guid>
+				<description>&lt;p&gt;A static blog design inspired by terminal aesthetics and plain text workflows.&lt;/p&gt;&#xA;&lt;p&gt;No JavaScript. No cards. No popup menus.&lt;/p&gt;&#xA;&lt;p&gt;The experience is meant to feel like a beautifully formatted README.&lt;/p&gt;</description>
+			</item>
+	</channel>
+</rss>

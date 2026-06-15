@@ -1,0 +1,28 @@
+{{ define "main" }}
+<header>
+  <h1>{{ .Site.Title }}</h1>
+  <p>
+    {{- $startDate := time.AsTime .Site.Params.startDate -}}
+    {{- $yearsExp := sub (now.Year) $startDate.Year -}}
+    Hello, I'm a software engineer with {{ $yearsExp }} years of work experience. I enjoy learning systems programming, distributed systems, and building software from first principles. On this page you can find journal of my attempts. Cheers, happy building!
+  </p>
+</header>
+<ul>
+  <li>Blog
+    <ul>
+    {{ $posts := where .Site.RegularPages "Section" "posts" }}
+    {{ range $posts.ByDate.Reverse }}
+      <li><span class="item-date">{{ .Date.Format "2006-01-02" }}</span> <a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
+    {{ end }}
+    </ul>
+  </li>
+  <li>Projects
+    <ul>
+    {{ $projects := where .Site.RegularPages "Section" "projects" }}
+    {{ range $projects.ByTitle }}
+      <li><a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
+    {{ end }}
+    </ul>
+  </li>
+</ul>
+{{ end }}

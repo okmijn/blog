@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cedar: Evolution of a High-Performance KV Store · Kartik Rathor</title>
+    <meta name="description" content="Hello, I’m a software engineer learning systems programming, distributed systems, and building software from first principles. On this page you can find journal of my attempts. Cheers, happy building!" />
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body a="dark">
+    <main class="page-content" aria-label="Content">
+      <div class="w">
+        
+<article>
+  <div class="post-meta">
+    <a href="/">..</a>
+    
+      <p>
+        <time datetime="2026-06-15 00:00:00 &#43;0000 UTC">2026-06-15</time>
+      </p>
+    
+  </div>
+
+  <header>
+    <h1>Cedar: Evolution of a High-Performance KV Store</h1>
+  </header>
+  <section class="content">
+    <h1 id="building-a-high-throughput-key-value-store-in-go">Building a High-Throughput Key-Value Store in Go</h1>
+<p>In this post, I will document the architectural journey of Cedar. We will explore how it evolved from a simple local script into a highly concurrent TCP server capable of handling nearly 190,000 requests per second, the tradeoffs made along the way, and the low-level Go patterns that made it possible.</p>
+<h2 id="the-requirements">The Requirements</h2>
+<p>Before writing any code, it was critical to define what Cedar needed to be (and what it didn't need to be). Clear requirements direct the architecture and prevent feature creep.</p>
+<ul>
+<li><strong>High Throughput:</strong> The engine must handle massive read/write volumes with minimal latency.</li>
+<li><strong>Concurrency:</strong> It must be thread-safe. Multiple network clients must be able to read and write simultaneously without data races or corruption.</li>
+<li><strong>Extensibility:</strong> The execution logic must be decoupled from the transport layer. I wanted to be able to interact with the database via a local CLI or a TCP socket without rewriting the core logic.</li>
+<li><strong>Durability:</strong> Data cannot be ephemeral. The store must have a mechanism to save state to disk and restore it upon restart.</li>
+</ul>
+<p><strong>Out of scope:</strong></p>
+<ul>
+<li>Complex relations or SQL parsing.</li>
+<li>Distributed consensus (Raft/Paxos) for this specific iteration.</li>
+</ul>
+<blockquote>
+<p>Code is mostly human generated. Unit/Benchmark test and doc is AI written.</p>
+</blockquote>
+<h2 id="1-the-core-engine-and-thread-safety">1. The Core Engine and Thread Safety</h2>
+<p>At the heart of any in-memory KV store is a hash map. Go provides a highly efficient built-in <code>map[string]string</code>, giving us $O(1)$ average-time complexity for lookups and insertions.</p>
+<p>However, standard Go maps are <strong>not thread-safe</strong>. If one goroutine writes to a map while another reads from it, the program will panic.</p>
+<h3 id="the-concurrency-tradeoff">The Concurrency Tradeoff</h3>
+<p>To solve this, we need a locking mechanism. The naive approach is a standard <code>sync.Mutex</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#75715e">// The Naive Approach</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">mu</span>.<span style="color:#a6e22e">Lock</span>()
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">val</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">Data</span>[<span style="color:#a6e22e">key</span>]
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">mu</span>.<span style="color:#a6e22e">Unlock</span>()
+</span></span></code></pre></div><p>The problem here is lock contention. If 1,000 clients try to read simultaneously, they form a single-file line.</p>
+<p>Instead, Cedar uses a <code>sync.RWMutex</code> (Reader-Writer Mutex).</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">type</span> <span style="color:#a6e22e">Store</span> <span style="color:#66d9ef">struct</span> {
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">mu</span>           <span style="color:#a6e22e">sync</span>.<span style="color:#a6e22e">RWMutex</span>
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">Data</span>         <span style="color:#66d9ef">map</span>[<span style="color:#66d9ef">string</span>]<span style="color:#66d9ef">string</span>
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">SnapshotPath</span> <span style="color:#66d9ef">string</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">s</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">Store</span>) <span style="color:#a6e22e">Get</span>(<span style="color:#a6e22e">key</span> <span style="color:#66d9ef">string</span>) (<span style="color:#66d9ef">string</span>, <span style="color:#66d9ef">bool</span>) {
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">mu</span>.<span style="color:#a6e22e">RLock</span>() <span style="color:#75715e">// Multiple readers allowed simultaneously</span>
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">defer</span> <span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">mu</span>.<span style="color:#a6e22e">RUnlock</span>()
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">val</span>, <span style="color:#a6e22e">ok</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">Data</span>[<span style="color:#a6e22e">key</span>]
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">return</span> <span style="color:#a6e22e">val</span>, <span style="color:#a6e22e">ok</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">func</span> (<span style="color:#a6e22e">s</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">Store</span>) <span style="color:#a6e22e">Set</span>(<span style="color:#a6e22e">key</span>, <span style="color:#a6e22e">value</span> <span style="color:#66d9ef">string</span>) {
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">mu</span>.<span style="color:#a6e22e">Lock</span>() <span style="color:#75715e">// Exclusive lock. Blocks other writers AND readers.</span>
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">defer</span> <span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">mu</span>.<span style="color:#a6e22e">Unlock</span>()
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">Data</span>[<span style="color:#a6e22e">key</span>] = <span style="color:#a6e22e">value</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p><strong>The Tradeoff:</strong> An <code>RWMutex</code> optimizes for read-heavy workloads. It allows infinite concurrent readers, making <code>GET</code> operations blazing fast. The tradeoff is that a write operation must wait for all active reads to finish before it can acquire the exclusive lock.</p>
+<h2 id="2-decoupling-intent-from-delivery">2. Decoupling Intent from Delivery</h2>
+<p>In the initial prototype, Cedar was a simple CLI tool. The logic to parse a command, execute it, and print the result to the terminal was all tightly coupled.</p>
+<p>When it came time to add a TCP server, this architecture broke down. I couldn't reuse the logic because it was hardcoded to use <code>fmt.Println</code> to <code>os.Stdout</code>.</p>
+<h3 id="interface-injection">Interface Injection</h3>
+<p>To solve this, I employed the Strategy pattern by injecting the <code>io.Writer</code> interface into the core execution engine.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#75715e">// internal/engine/executor.go</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">type</span> <span style="color:#a6e22e">commandHandler</span> <span style="color:#66d9ef">func</span>(<span style="color:#a6e22e">s</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">store</span>.<span style="color:#a6e22e">Store</span>, <span style="color:#a6e22e">args</span> []<span style="color:#66d9ef">string</span>, <span style="color:#a6e22e">out</span> <span style="color:#a6e22e">io</span>.<span style="color:#a6e22e">Writer</span>) <span style="color:#66d9ef">error</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">handleGet</span>(<span style="color:#a6e22e">s</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">store</span>.<span style="color:#a6e22e">Store</span>, <span style="color:#a6e22e">args</span> []<span style="color:#66d9ef">string</span>, <span style="color:#a6e22e">out</span> <span style="color:#a6e22e">io</span>.<span style="color:#a6e22e">Writer</span>) <span style="color:#66d9ef">error</span> {
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">val</span>, <span style="color:#a6e22e">ok</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">s</span>.<span style="color:#a6e22e">Get</span>(<span style="color:#a6e22e">args</span>[<span style="color:#ae81ff">0</span>])
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">if</span> !<span style="color:#a6e22e">ok</span> {
+</span></span><span style="display:flex;"><span>		<span style="color:#66d9ef">return</span> <span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Errorf</span>(<span style="color:#e6db74">&#34;key not found&#34;</span>)
+</span></span><span style="display:flex;"><span>	}
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Fprintln</span>(<span style="color:#a6e22e">out</span>, <span style="color:#a6e22e">val</span>) <span style="color:#75715e">// Writes seamlessly to wherever &#39;out&#39; points</span>
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">return</span> <span style="color:#66d9ef">nil</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>Because a TCP connection (<code>net.Conn</code>) implements <code>io.Writer</code>, and the standard output (<code>os.Stdout</code>) also implements <code>io.Writer</code>, the engine no longer cares <em>who</em> is asking for the data.</p>
+<h3 id="the-command-registry">The Command Registry</h3>
+<p>As the number of commands grew (<code>SET</code>, <code>GET</code>, <code>DEL</code>, <code>SCAN</code>), a <code>switch</code> statement becameaO(N) lookup time and violated the Open-Closed principle.</p>
+<p><mark>This does not really make huge difference in terms of time becuase of limited features</mark></p>
+<p>I replaced the switch with a map-based <strong>Command Registry</strong>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">Registry</span> = <span style="color:#66d9ef">map</span>[<span style="color:#66d9ef">string</span>]<span style="color:#a6e22e">commandHandler</span>{}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">init</span>() {
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">Registry</span>[<span style="color:#e6db74">&#34;set&#34;</span>] = <span style="color:#a6e22e">handleSet</span>
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">Registry</span>[<span style="color:#e6db74">&#34;get&#34;</span>] = <span style="color:#a6e22e">handleGet</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Adding a new command is as simple as adding a line here.</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">Execute</span>(<span style="color:#a6e22e">s</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">store</span>.<span style="color:#a6e22e">Store</span>, <span style="color:#a6e22e">parts</span> []<span style="color:#66d9ef">string</span>, <span style="color:#a6e22e">out</span> <span style="color:#a6e22e">io</span>.<span style="color:#a6e22e">Writer</span>) <span style="color:#66d9ef">error</span> {
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">cmdName</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">strings</span>.<span style="color:#a6e22e">ToLower</span>(<span style="color:#a6e22e">parts</span>[<span style="color:#ae81ff">0</span>])
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">handler</span>, <span style="color:#a6e22e">ok</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">Registry</span>[<span style="color:#a6e22e">cmdName</span>]
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">if</span> !<span style="color:#a6e22e">ok</span> {
+</span></span><span style="display:flex;"><span>		<span style="color:#66d9ef">return</span> <span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Errorf</span>(<span style="color:#e6db74">&#34;invalid command&#34;</span>)
+</span></span><span style="display:flex;"><span>	}
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">return</span> <span style="color:#a6e22e">handler</span>(<span style="color:#a6e22e">s</span>, <span style="color:#a6e22e">parts</span>[<span style="color:#ae81ff">1</span>:], <span style="color:#a6e22e">out</span>) <span style="color:#75715e">// O(1) Dispatch</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><h2 id="3-the-tcp-server-and-concurrency">3. The TCP Server and Concurrency</h2>
+<p>With the engine decoupled, wrapping Cedar in a TCP server was remarkably simple. The heavy lifting is handled by Go's lightweight concurrency primitives: goroutines.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#75715e">// internal/tcp/tcp.go</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">Start</span>(<span style="color:#a6e22e">s</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">store</span>.<span style="color:#a6e22e">Store</span>, <span style="color:#a6e22e">addr</span> <span style="color:#66d9ef">string</span>) <span style="color:#66d9ef">error</span> {
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">listener</span>, <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">Listen</span>(<span style="color:#e6db74">&#34;tcp&#34;</span>, <span style="color:#a6e22e">addr</span>)
+</span></span><span style="display:flex;"><span>	<span style="color:#75715e">// ...</span>
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">for</span> {
+</span></span><span style="display:flex;"><span>		<span style="color:#a6e22e">conn</span>, <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">listener</span>.<span style="color:#a6e22e">Accept</span>()
+</span></span><span style="display:flex;"><span>		<span style="color:#75715e">// ...</span>
+</span></span><span style="display:flex;"><span>		<span style="color:#75715e">// Spawn a lightweight thread for every new client</span>
+</span></span><span style="display:flex;"><span>		<span style="color:#66d9ef">go</span> <span style="color:#a6e22e">handleConnection</span>(<span style="color:#a6e22e">s</span>, <span style="color:#a6e22e">conn</span>)
+</span></span><span style="display:flex;"><span>	}
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">handleConnection</span>(<span style="color:#a6e22e">s</span> <span style="color:#f92672">*</span><span style="color:#a6e22e">store</span>.<span style="color:#a6e22e">Store</span>, <span style="color:#a6e22e">conn</span> <span style="color:#a6e22e">net</span>.<span style="color:#a6e22e">Conn</span>) {
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">defer</span> <span style="color:#a6e22e">conn</span>.<span style="color:#a6e22e">Close</span>()
+</span></span><span style="display:flex;"><span>	<span style="color:#a6e22e">scanner</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">bufio</span>.<span style="color:#a6e22e">NewScanner</span>(<span style="color:#a6e22e">conn</span>)
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">for</span> <span style="color:#a6e22e">scanner</span>.<span style="color:#a6e22e">Scan</span>() {
+</span></span><span style="display:flex;"><span>		<span style="color:#a6e22e">parts</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">strings</span>.<span style="color:#a6e22e">Fields</span>(<span style="color:#a6e22e">scanner</span>.<span style="color:#a6e22e">Text</span>())
+</span></span><span style="display:flex;"><span>		
+</span></span><span style="display:flex;"><span>		<span style="color:#75715e">// Pass the TCP connection directly into the engine as the io.Writer</span>
+</span></span><span style="display:flex;"><span>		<span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">engine</span>.<span style="color:#a6e22e">Execute</span>(<span style="color:#a6e22e">s</span>, <span style="color:#a6e22e">parts</span>, <span style="color:#a6e22e">conn</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// ... error handling</span>
+</span></span><span style="display:flex;"><span>	}
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>This architecture allows Cedar to handle thousands of concurrent TCP connections, limited primarily by the OS's file descriptor limits and network bandwidth.</p>
+<h2 id="4-durability-snapshots-vs-the-write-ahead-log">4. Durability: Snapshots vs. The Write-Ahead Log</h2>
+<p>A memory-only database is just a cache. To make Cedar a true database, data must survive a restart.</p>
+<p>Currently, Cedar implements <strong>Snapshotting</strong>. When the process receives an interrupt signal (<code>SIGTERM</code>), it halts operations, serializes the entire <code>map[string]string</code>, and writes it to <code>snapshot.txt</code>.</p>
+<h3 id="the-problem-with-snapshots">The Problem with Snapshots</h3>
+<p>While simple to implement, snapshotting has severe limitations:</p>
+<ol>
+<li><strong>$O(N)$ Cost</strong>: Writing 2 million keys to disk blocks the system.</li>
+<li><strong>Data Loss</strong>: If the server loses power unexpectedly <em>before</em> a snapshot occurs, all data since the last boot is lost.</li>
+</ol>
+<h3 id="the-future-write-ahead-logging-wal">The Future: Write-Ahead Logging (WAL)</h3>
+<p>In the next major iteration, Cedar will transition to an <strong>Append-Only Log (WAL)</strong>.
+Instead of writing the whole map, every single <code>SET</code> or <code>DEL</code> operation will be appended to the end of a file in real-time.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>// Example WAL structure
+</span></span><span style="display:flex;"><span>SET:user:1=kartik
+</span></span><span style="display:flex;"><span>SET:user:2=daan
+</span></span><span style="display:flex;"><span>DEL:user:1
+</span></span></code></pre></div><p>Because appending to a file is an $O(1)$ sequential I/O operation, it is drastically faster than a full snapshot. Upon reboot, the system simply &quot;replays&quot; the log line-by-line to rebuild the in-memory map.</p>
+<p>To balance speed and safety, we will implement <strong>Periodic <code>fsync</code></strong>, where the OS buffers the writes immediately (fast), and a background goroutine forces the data to the physical disk every 1 second (safe).</p>
+<h2 id="conclusion-and-performance">Conclusion and Performance</h2>
+<p>Through careful use of Go's concurrency primitives, interface injection, and decoupling, Cedar has matured into a highly capable system.</p>
+<p>In our stress tests using a pre-populated dataset of <strong>1,000,000 keys</strong>:</p>
+<ul>
+<li>Single-client <code>GET</code> latency hovers around <strong>15µs</strong>.</li>
+<li>With <strong>100 concurrent clients</strong>, the server processes over <strong>180,000 requests per second</strong> with a median latency of ~0.5ms.</li>
+</ul>
+<p>Building Cedar has been an incredible deep-dive into the realities of database engineering. In future posts, we will explore implementing the WAL, and replacing the underlying Hash Map with a Radix Tree to optimize our $O(N)$ prefix scanning bottleneck.</p>
+
+  </section>
+</article>
+
+
+        <div class="site-footer">
+          <p>
+            © 2026 Kartik Rathor
+            <a class="linkedin" href="https://www.linkedin.com/in/kartikrathor" aria-label="LinkedIn" target="_blank" rel="noopener noreferrer">
+              <svg viewBox="0 0 32 32" width="1em" height="1em" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <g>
+                  <path d="M17.303,14.365c0.012-0.015,0.023-0.031,0.031-0.048v0.048H17.303z M32,0v32H0V0H32L32,0z M9.925,12.285H5.153v14.354
+                    h4.772V12.285z M10.237,7.847c-0.03-1.41-1.035-2.482-2.668-2.482c-1.631,0-2.698,1.072-2.698,2.482
+                    c0,1.375,1.035,2.479,2.636,2.479h0.031C9.202,10.326,10.237,9.222,10.237,7.847z M27.129,18.408c0-4.408-2.355-6.459-5.494-6.459
+                    c-2.531,0-3.664,1.391-4.301,2.368v-2.032h-4.77c0.061,1.346,0,14.354,0,14.354h4.77v-8.016c0-0.434,0.031-0.855,0.157-1.164
+                    c0.346-0.854,1.132-1.746,2.448-1.746c1.729,0,2.418,1.314,2.418,3.246v7.68h4.771L27.129,18.408L27.129,18.408z"/>
+                </g>
+              </svg>
+            </a>
+          </p>
+        </div>
+      </div>
+    </main>
+    <footer></footer>
+  </body>
+</html>

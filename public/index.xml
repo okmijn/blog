@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+	<channel>
+		<title>Kartik Rathor</title>
+		<link>http://localhost:1313/</link>
+		<description>Recent content on Kartik Rathor</description>
+		<generator>Hugo</generator>
+		<language>en-us</language>
+		
+		
+		
+		
+			<lastBuildDate>Mon, 15 Jun 2026 00:00:00 +0000</lastBuildDate>
+		
+			<atom:link href="http://localhost:1313/index.xml" rel="self" type="application/rss+xml" />
+			<item>
+				<title>About</title>
+				<link>http://localhost:1313/about/</link>
+				<pubDate>Mon, 15 Jun 2026 00:00:00 +0000</pubDate>
+				<guid>http://localhost:1313/about/</guid>
+				<description>&lt;p&gt;This is a personal engineering notebook for ideas, systems notes, and technical writing.&lt;/p&gt;&#xA;&lt;p&gt;Minimal design. Clear thinking. No distractions.&lt;/p&gt;</description>
+			</item>
+			<item>
+				<title>Cedar: Evolution of a High-Performance KV Store</title>
+				<link>http://localhost:1313/posts/phase-1-cedar/</link>
+				<pubDate>Mon, 15 Jun 2026 00:00:00 +0000</pubDate>
+				<guid>http://localhost:1313/posts/phase-1-cedar/</guid>
+				<description>&lt;h1 id=&#34;building-a-high-throughput-key-value-store-in-go&#34;&gt;Building a High-Throughput Key-Value Store in Go&lt;/h1&gt;&#xA;&lt;p&gt;In this post, I will document the architectural journey of Cedar. We will explore how it evolved from a simple local script into a highly concurrent TCP server capable of handling nearly 190,000 requests per second, the tradeoffs made along the way, and the low-level Go patterns that made it possible.&lt;/p&gt;&#xA;&lt;h2 id=&#34;the-requirements&#34;&gt;The Requirements&lt;/h2&gt;&#xA;&lt;p&gt;Before writing any code, it was critical to define what Cedar needed to be (and what it didn&#39;t need to be). Clear requirements direct the architecture and prevent feature creep.&lt;/p&gt;</description>
+			</item>
+			<item>
+				<title>Building Cedar, part 1</title>
+				<link>http://localhost:1313/posts/building-cedar-part1/</link>
+				<pubDate>Wed, 10 Jun 2026 00:00:00 +0000</pubDate>
+				<guid>http://localhost:1313/posts/building-cedar-part1/</guid>
+				<description>&lt;p&gt;A systems engineer begins with a problem: can infrastructure feel as honest and simple as a carefully written terminal session?&lt;/p&gt;&#xA;&lt;p&gt;This post explores the first steps of designing a toolchain with composable pipelines, immutable state, and small, deliberate abstractions.&lt;/p&gt;&#xA;&lt;h2 id=&#34;notes&#34;&gt;Notes&lt;/h2&gt;&#xA;&lt;ul&gt;&#xA;&lt;li&gt;Keep the surface area small.&lt;/li&gt;&#xA;&lt;li&gt;Prefer clarity over cleverness.&lt;/li&gt;&#xA;&lt;li&gt;Treat every configuration file like source code.&lt;/li&gt;&#xA;&lt;/ul&gt;&#xA;&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;&#34;&gt;&lt;code class=&#34;language-sh&#34; data-lang=&#34;sh&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;mkdir cedar&#xA;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;cd cedar&#xA;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;git init&#xA;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;</description>
+			</item>
+			<item>
+				<title>How I organize systems notes</title>
+				<link>http://localhost:1313/posts/how-i-organize-systems-notes/</link>
+				<pubDate>Thu, 28 May 2026 00:00:00 +0000</pubDate>
+				<guid>http://localhost:1313/posts/how-i-organize-systems-notes/</guid>
+				<description>&lt;p&gt;Good notes are a quiet system for thinking. They should stay easy to read, easy to update, and easy to share.&lt;/p&gt;&#xA;&lt;h2 id=&#34;approach&#34;&gt;Approach&lt;/h2&gt;&#xA;&lt;ol&gt;&#xA;&lt;li&gt;Capture the problem.&lt;/li&gt;&#xA;&lt;li&gt;Record the steps.&lt;/li&gt;&#xA;&lt;li&gt;Keep the result verifiable.&lt;/li&gt;&#xA;&lt;/ol&gt;&#xA;&lt;blockquote&gt;&#xA;&lt;p&gt;The goal is not to publish, it is to remember and improve.&lt;/p&gt;&#xA;&lt;/blockquote&gt;&#xA;&lt;h2 id=&#34;structure&#34;&gt;Structure&lt;/h2&gt;&#xA;&lt;table&gt;&#xA;&#x9;&lt;thead&gt;&#xA;&#x9;&#x9;&#x9;&lt;tr&gt;&#xA;&#x9;&#x9;&#x9;&#x9;&#x9;&lt;th&gt;Section&lt;/th&gt;&#xA;&#x9;&#x9;&#x9;&#x9;&#x9;&lt;th&gt;Purpose&lt;/th&gt;&#xA;&#x9;&#x9;&#x9;&lt;/tr&gt;&#xA;&#x9;&lt;/thead&gt;&#xA;&#x9;&lt;tbody&gt;&#xA;&#x9;&#x9;&#x9;&lt;tr&gt;&#xA;&#x9;&#x9;&#x9;&#x9;&#x9;&lt;td&gt;Goals&lt;/td&gt;&#xA;&#x9;&#x9;&#x9;&#x9;&#x9;&lt;td&gt;Why this exists&lt;/td&gt;&#xA;&#x9;&#x9;&#x9;&lt;/tr&gt;&#xA;&#x9;&#x9;&#x9;&lt;tr&gt;&#xA;&#x9;&#x9;&#x9;&#x9;&#x9;&lt;td&gt;Commands&lt;/td&gt;&#xA;&#x9;&#x9;&#x9;&#x9;&#x9;&lt;td&gt;Exact shell invocations&lt;/td&gt;&#xA;&#x9;&#x9;&#x9;&lt;/tr&gt;&#xA;&#x9;&#x9;&#x9;&lt;tr&gt;&#xA;&#x9;&#x9;&#x9;&#x9;&#x9;&lt;td&gt;References&lt;/td&gt;&#xA;&#x9;&#x9;&#x9;&#x9;&#x9;&lt;td&gt;Links and concepts&lt;/td&gt;&#xA;&#x9;&#x9;&#x9;&lt;/tr&gt;&#xA;&#x9;&lt;/tbody&gt;&#xA;&lt;/table&gt;</description>
+			</item>
+			<item>
+				<title>Self-hosted archive</title>
+				<link>http://localhost:1313/projects/self-hosted-archive/</link>
+				<pubDate>Mon, 20 Apr 2026 00:00:00 +0000</pubDate>
+				<guid>http://localhost:1313/projects/self-hosted-archive/</guid>
+				<description>&lt;p&gt;A read-only archive for notes, scripts, and low-bandwidth reference material.&lt;/p&gt;&#xA;&lt;p&gt;It is intentionally small, predictable, and easy to update with a single deploy step.&lt;/p&gt;</description>
+			</item>
+			<item>
+				<title>Terminal blog</title>
+				<link>http://localhost:1313/projects/terminal-blog/</link>
+				<pubDate>Sun, 15 Mar 2026 00:00:00 +0000</pubDate>
+				<guid>http://localhost:1313/projects/terminal-blog/</guid>
+				<description>&lt;p&gt;A static blog design inspired by terminal aesthetics and plain text workflows.&lt;/p&gt;&#xA;&lt;p&gt;No JavaScript. No cards. No popup menus.&lt;/p&gt;&#xA;&lt;p&gt;The experience is meant to feel like a beautifully formatted README.&lt;/p&gt;</description>
+			</item>
+	</channel>
+</rss>
