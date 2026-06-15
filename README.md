@@ -1,6 +1,6 @@
 # Personal Engineering Blog
 
-A minimalist Hugo site inspired by daan.nl.
+A minimalist Hugo site.
 
 ## Layout
 
