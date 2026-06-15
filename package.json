@@ -1,0 +1,7 @@
+{
+  "name": "kartik-site",
+  "private": true,
+  "scripts": {
+    "build": "hugo --minify"
+  }
+}
